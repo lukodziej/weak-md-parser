@@ -2,78 +2,72 @@ package com.github.arena.challenges.weakmdparser;
 
 public class MarkdownParser {
 
+    private static final String NEW_LINE_SYMBOL = "\n";
+    private static final String HTML_BOLD = "<strong>$1</strong>";
+    private static final String HTML_ITALIC = "<em>$1</em>";
+    private static final String MARKDOWN_BOLD = "__(.+)__";
+    private static final String MARKDOWN_ITALIC = "_(.+)_";
+    private static final String START_LIST = "<li>";
+    private static final String END_LIST = "</li>";
+
     public String parse(String markdown) {
-        String[] lines = markdown.split("\n");
+        String[] lines = markdown.split(NEW_LINE_SYMBOL);
         StringBuilder result = new StringBuilder();
-        boolean activeList = false;
 
-        for (String line:lines) {
-
-            String theLine = parseHeader(line);
-
-            if (theLine == null) {
-                theLine = parseList(line);
-            }
-
-            if (theLine == null) {
-                theLine = parseParagraph(line);
-            }
-
-            if (theLine.matches("(<li>).*") && !theLine.matches("(<h).*") && !theLine.matches("(<p>).*") && !activeList) {
-                activeList = true;
-                result.append("<ul>").append(theLine);
-
-            } else if (!theLine.matches("(<li>).*") && activeList) {
-                activeList = false;
-                result.append("</ul>").append(theLine);
-            } else {
-                result.append(theLine);
-            }
+        for (String line : lines) {
+            result.append(parseLine(line));
         }
-
-        if (activeList) {
-            result.append("</ul>");
-        }
-
+        result = parseListHeaderNew(result);
         return result.toString();
     }
 
-    private String parseHeader(String markdown) {
-        int count = 0;
-
-        for (int i = 0; i < markdown.length() && markdown.charAt(i) == '#'; i++) {
-            count++;
+    private String parseLine(String line) {
+        String theLine = parseHeader(line);
+        if (theLine == null) {
+            theLine = parseList(line);
         }
-
-        if (count == 0) {
-            return null;
+        if (theLine == null) {
+            theLine = parseParagraph(line);
         }
-
-        return "<h" + count + ">" + markdown.substring(count + 1) + "</h" + count + ">";
+        return theLine;
     }
 
-    private String parseList(String markdown) {
-        if (markdown.startsWith("*")) {
-            String skipAsterisk = markdown.substring(2);
-            String listItemString = parseToBoldAndItalic(skipAsterisk);
-            return "<li>" + listItemString + "</li>";
-        }
-
-        return null;
+    private String parseHeader(String markdown) {
+        int count = markdown.length() - markdown.replaceAll("^#+", "").length();
+        return count == 0 ? null : "<h" + count + ">" + markdown.substring(count + 1) + "</h" + count + ">";
     }
 
     private String parseParagraph(String markdown) {
-        return "<p>" + parseToBoldAndItalic(markdown) + "</p>";
+        return wrapInTags(markdown, "p");
+    }
+
+    private StringBuilder parseListHeaderNew(StringBuilder line) {
+        StringBuilder result = new StringBuilder();
+        int firstIndex = line.indexOf(START_LIST);
+        int lastIndex = line.lastIndexOf(END_LIST);
+
+        if (firstIndex == -1 || lastIndex == -1) {
+            return line;
+        }
+
+        result.append(line.substring(0, firstIndex))
+                .append("<ul>")
+                .append(line.substring(firstIndex, lastIndex + START_LIST.length() + 1)).append("</ul>")
+                .append(line.substring(lastIndex + END_LIST.length()));
+        return result;
+    }
+
+    private String parseList(String markdown) {
+        return !markdown.startsWith("*") ? null : wrapInTags(markdown.substring(2), "li");
     }
 
     private String parseToBoldAndItalic(String markdown) {
+        return markdown
+                .replaceAll(MARKDOWN_BOLD, HTML_BOLD)
+                .replaceAll(MARKDOWN_ITALIC, HTML_ITALIC);
+    }
 
-        String lookingFor = "__(.+)__";
-        String update = "<strong>$1</strong>";
-        String workingOn = markdown.replaceAll(lookingFor, update);
-
-        lookingFor = "_(.+)_";
-        update = "<em>$1</em>";
-        return workingOn.replaceAll(lookingFor, update);
+    private String wrapInTags(String markdown, String tag) {
+        return String.format("<%s>%s</%s>", tag, parseToBoldAndItalic(markdown), tag);
     }
 }
